@@ -1,0 +1,383 @@
+
+# Este script calcula automáticamente cuatro indicadores cuantitativos del rendimiento diadococinético: 
+# el promedio de sílabas por segundo, el coeficiente de variabilidad del promedio de sílabas por segundo, 
+# la duración promedio de la sílaba y el coeficiente de variabilidad de la duración promedio de la sílaba.
+
+# This script is distributed under GNU General Public License.
+# Autores: Hernán Emilio Pérez, Daniela Osses y Domingo Román. 20 de abril de 2021.
+
+# Para utilizarlo debe grabar antes una emisión repetida y continua de la sílaba /pa/ de al menos 8 segundos
+# (o 30 repeticiones). Puede funcionar con emisiones más breves, pero lo ideal es un mínimo de 30 repeticiones
+# para mayor precisión en los cálculos.
+# Eventualmente también puede funcionar con la repetición de las sílabas /ta/ o /ka/
+# o de la la serie /pataka/. Pero lo más común es que se use repeticiones de la sílaba /pa/
+
+	sonido = selected("Sound")
+
+# Etiquetaje automático. En esta parte el programa detecta y decide automáticamente
+# dónde están cada una de las consonantes y las vocales. Además de eso, crea el Tier 1
+# en dónde marca los límites de cada segmento y etiqueta con un "0" los intervalos
+# consonánticos y con un "1" los vocálicos
+
+	# etiqueta para indicar el lugar de regreso de la opción "Re-analizar"
+	label SEGMENTADO
+
+	# Menú para definir el umbral de detección de los silencios (oclusión) antes de hacer la segmentación
+	beginPause: "Inicio de la segmentación"
+		comment: "Para dar inicio a la segmentación automática, defina primero un umbral de detección de la oclusión"
+
+	choice: "Umbral", 1
+		option: "Alto"
+		option: "Medio"
+		option: "Bajo"
+	clicked = endPause: "Segmentar", 1
+
+		if umbral = 1
+			dB = -20
+		elsif umbral = 2
+			dB = -15
+		elsif umbral = 3
+			dB = -10
+		endif
+	
+	textGrid = To TextGrid (silences): 100, 0, dB, 0.01, 0.03, "0", "1"
+
+
+# Tiempo para corrección manual. En esta parte, el script hace una pausa en el proceso
+# para permitir que el usuario revise visualmente si la segmentación automática está correcta.
+# Esta pausa también permite que el usuario modifique y corrija segmentaciones incorrectas. 
+# Este menú permite además que el usuario vuelva a solicitar la segmentación automática si lo desea.
+
+	beginPause: "Revisión de la segmentación"
+    		comment: "Revise y corrija la segmentación y luego presione el botón 'Continuar'"
+			comment: " "
+    		comment: "Si la segmentación ha sido pobre, presione 'Re-analizar' y modifique el umbral de detección de la oclusión"
+
+	clicked = endPause: "Re-analizar", "Continuar", 1
+	if clicked = 1
+		select textGrid
+		Remove
+		select sonido
+    		goto SEGMENTADO
+	elsif clicked = 2
+	endif
+
+### Para revisar y corregir la segmentación, 
+### seleccione el objeto Sound y el objeto TexGrid y luego presione 
+### el botón "View & Edit". Una vez que haya terminado de editar 
+### el TextGrid, cierre la ventana y presione en este menú el botón "continue""
+
+# Una vez que el usuario termina la revisión y eventual corrección, presiona el botón "continue" y comienza
+# el procesamiento de los datos.
+
+# Comentario: eventualmente, en esta parte, el script podría dividirse en dos scripts diferentes que funcionaran
+# de forma independiente, pero eso no lo hemos decidido todavía. (Piento que podrían hacerse dos versiones, una
+# en que funcione todo integrado y otra en que se puedan ocupar los dos scripts de forma independiente)
+
+# Trabajo con el TextGrid
+
+	select textGrid
+		
+		# Activar esta línea sólo en caso de que se quiera hacer el análisis 
+		# con un TextGrid ya generado, es decir, sin pasar por los pasos 1 y 2. 
+		# textGrid = selected("TextGrid")
+		
+		# En esta variable se almacena el dato de cuántos intervalos hay en el tier 1
+
+		n_intervalos = Get number of intervals: 1
+
+	
+	# RUTINA PARA CREAR Y ETIQUETAR EL TIER 2 QUE CONTIENE LOS INTERVALOS DE TIEMPO 
+	# (1 segundo por intervalo)
+	# obtiene el valor en tiempo del intervalo del tier 1
+	# que debería corresponder a la consonante de la segunda sílaba
+	# y luego de eso va insertando un boundary cada 1 segundo
+
+        select textGrid
+
+	#crea tier del tiempo (para segmentar en segundos)
+	
+		Insert interval tier: 2, "time"
+
+		# Aquí busca el primer intervalo consonántico en el tier 1, y define su tiempo de inicio  
+		# para comenzar el etiquetado del tier 2 desde ahí. Así se deja fuera todo dato no deseado
+		# que pudiese haber en el primer y/o segundo intervalo.
+
+		etiqSegIntrv = Get label of interval: 1, 2
+
+			if etiqSegIntrv == 1
+
+				timePrimeraConsonante = Get start time of interval: 1, 3
+				intervInicialTier1 = 3
+				intervalos = n_intervalos-2
+
+			elsif etiqSegIntrv == 0
+
+				timePrimeraConsonante = Get start time of interval: 1, 2
+				intervInicialTier1 = 2
+				intervalos = n_intervalos-1
+			endif
+		
+	# Inserta un boundary en el tier 2 alineado con el valor del 
+	# primer intervalo consonántico (0) del tier 1
+
+		Insert boundary: 2, timePrimeraConsonante
+
+	# Inserta el intervalo siguiente a 1 segundo de distancia
+	# y lo repite hasta que acabe el archivo de audio
+
+	# primero define las variables para calcular cuántas veces debe repetir el etiquetado
+
+		durTotalAudio = Get total duration
+		preentero = (durTotalAudio-timePrimeraConsonante)
+		entero = floor(durTotalAudio-timePrimeraConsonante)
+
+	# ciclos de etiquetado
+
+		for i to entero
+			temp = Get end time of interval: 2, i
+			boundary = temp+1
+			if boundary < durTotalAudio
+			   Insert boundary: 2, temp+1
+			else
+			endif
+		endfor
+
+	# Aquí termina el etiquetado del tier 2 "time"
+
+
+###################################################################################
+
+	# RUTINA PARA CREAR Y ETIQUETAR EL TIER 3 QUE CONTIENE LOS INTERVALOS SILABICOS 
+	# (1 sílaba por intervalo)
+	# obtiene el valor en tiempo del intervalo del tier 1
+	# que debería corresponder a la consonante de la segunda sílaba
+	# luego va calculando la duración de cada sílaba con los datos de duración del tier 1
+	# e inserta un boundary al final de cada vocal
+
+	# crea tier de sílabas (para segmentar en sílabas)
+	
+		Insert interval tier: 3, "sil"
+
+	# Inserta un boundary en el tier 2 alineado con el valor del 
+	# primer intervalo consonántico (0) del tier 1
+
+		Insert boundary: 3, timePrimeraConsonante
+
+	# define variables operativas
+		intervalo = intervInicialTier1
+		itera = floor(intervalos/2)
+		
+		
+		# timeAcum = timePrimeraConsonante
+
+		  ult_intervalo = Get label of interval: 1, n_intervalos
+
+                              if ult_intervalo == 1
+ 				  itera = itera -1
+
+			      elsif ult_intervalo == 0
+				  itera = itera
+                               endif
+
+	# Crea la tabla para almacenar los valores de duración de cada sílaba  
+	# para poder después calcular el coef. de variabilidad de la duración de la sílaba 
+	
+	tablaDS = Create Table with column names: "TablaDS", itera, "DS"
+
+	select textGrid
+
+	# ciclos de etiquetado
+	for i to itera
+
+		# calcula la duración de la consonante
+		finCons = Get end time of interval: 1, intervalo
+		iniCons = Get start time of interval: 1, intervalo
+		durCons = finCons - iniCons
+
+		intervalo = intervalo+1
+
+		# calcula la duración de la vocal
+		finVoc = Get end time of interval: 1, intervalo
+		iniVoc = Get start time of interval: 1, intervalo
+		durVoc = finVoc - iniVoc
+		
+		# calcula la duración de la sílaba
+		durSil = durCons+durVoc
+
+		# Inserta un boundary al final de la sílaba
+		 Insert boundary: 3, finVoc
+		 
+			# Ingresa los valores de duración de cada sílaba en la tabla
+ 			select tablaDS
+ 			Set numeric value: i, "DS", durSil
+			select textGrid
+
+			#convierte el resultado en string (esto es necesario para insertar el valor en el TextGrid)
+			durSil$ = string$(durSil)
+
+			# Inserta el valor de sil/seg en el intervalo correspondiente
+			Set interval text: 3, i+1, durSil$
+            
+                # redefine valor de la variable intervalo
+		intervalo = intervalo+1
+
+	endfor
+
+###################################################################################
+
+
+	# RUTINA PARA CALCULAR EL NÚMERO DE SÍLABAS POR SEGUNDO EN CADA SEGUNDO 
+	# obtiene la duración de los intervalos que coinciden con el inicio y final de cada segundo
+	# calcula la proporción de esa sílaba que se reparte entre los dos segundo contigüos
+	# luego cuenta la cantidad de sílabas completas que hay en cada segundo y a esa cifra
+	# le suma las proporciones que corresponden a cada intervalo de tiempo 
+	
+	# primero obtiene el número de intervalos de tiempo 
+	intervalosTier2 = Get number of intervals: 2
+
+	# define los intervalos que serán analizados
+	itera = intervalosTier2-2
+
+	# Crea la tabla para almacenar los valores de sílaba por segundo por cada intervalo de tiempo 
+	# para poder después calcular el coef. de variabilidad de sílabas por segundo 
+	tablaSPS = Create Table with column names: "TablaSPS", itera, "SPS"
+
+	select textGrid
+
+		# define algunas variables operativas que deber partir en cero, pero que luego irán acumulando valores en cada ciclo
+		reservaTime = 0
+		reservaSil = 0
+
+		for i to itera
+
+			# obtiene el valor del fin del primer intervalo de tiempo
+			finSeg = Get end time of interval: 2, i+1
+
+			#obtiene el intervalo silábico que coincide con el fin del intervalo de tiempo
+			silInterm = Get interval at time: 3, finSeg
+
+				# calcula la duración de la sílaba
+				fin = Get end time of interval: 3, silInterm
+				ini = Get start time of interval: 3, silInterm
+				dur = fin - ini
+
+					#calcula las proporciones de tiempo que se reparten entre ambos segundos contigüos
+					segs1 = finSeg-ini
+					decimal1 = segs1/dur
+					segs2 = fin-finSeg
+					decimal2 = segs2/dur
+
+				#calcula la cantidad de sílabas que hay en el segundo sumando las sílabas completas con las proporciones
+				
+                                        #reserv = decimal1+reservaTime
+					#writeInfoLine: reserv
+
+					result = (silInterm-2-reservaSil)+(decimal1+reservaTime)
+
+				#convierte el resultado en string (esto es necesario para insertar el valor en el TextGrid)
+				result$ = string$(result)
+
+			# Ingresa los valores de s/s de cada intervalo de tiempo
+ 			select tablaSPS
+ 			Set numeric value: i, "SPS", result
+			select textGrid
+
+			# Inserta el valor de sil/seg en el intervalo correspondiente
+			Set interval text: 2, i+1, result$
+		
+			#redefine el valor de las variables operativas para el siguiente ciclo
+
+				# define el valor acumulado de sílabas
+				if ini == finSeg
+					reservaSil = silInterm-1 
+				else
+					reservaSil = silInterm-1   
+				endif
+
+				# define el valor acumulado de tiempo	
+				reservaTime = decimal2
+
+		endfor
+
+	#Verificar si el último segmento de PSP contiene todas las sílabas o no
+ 				#buscar valor del útlimo intervalo silábico
+				select textGrid
+			        ult_inter_sil = Get number of intervals: 3
+				time_ult_3 = Get start time of interval: 3, ult_inter_sil
+				int_PSP_2 = Get interval at time: 2, time_ult_3
+				n_row_PSS = int_PSP_2 - 2
+				
+				select tablaSPS
+      			        n_rows = Get number of rows
+					  
+    				 while n_rows > n_row_PSS 	
+				    Remove row: n_rows
+				    n_rows = Get number of rows
+				 endwhile  
+
+
+###################################################################################
+
+# RUTINA PARA EL CÁLCULO DE LOS INDICADORES
+
+# Cálculo de los indicadores relativos a la tasa DDK
+
+	select tablaSPS
+		# Cálculo de la Tasa DDK
+		mediaSPS = Get mean: "SPS"
+
+		# Obtiene lacantidad de segundos analizados
+		nSilabas = Get number of rows
+
+
+		# Cálculo del coeficiente de variabilidad de la tasa
+		desvestSPS = Get standard deviation: "SPS"
+		coefVarPSS = (desvestSPS/mediaSPS)*100
+
+	Remove
+
+
+#Calculo de los indicadores relativos a duración de la sílaba
+
+	select tablaDS
+		# Cálculo de la duración promedio de la sílaba
+		mediaDS = Get mean: "DS"
+		mediaDSms = mediaDS*1000 
+
+		# Obtiene el n de sílabas analizados
+		nSegundos = Get number of rows
+
+		# Cálculo del coeficiente de variabiidad de la duración promedio de la sílaba
+		desvestDS = Get standard deviation: "DS"
+		coefVarDPS = (desvestDS/mediaDS)*100
+
+	Remove
+       
+
+###################################################################################
+
+
+# CREACION Y PUBLICACIÓN DEL INFORME FINAL
+
+  
+	   
+	writeInfoLine: " "
+	appendInfoLine: "-------------------------------------------------------------------------------------"
+	appendInfoLine: " "
+	appendInfoLine: tab$,tab$,"INFORME DE RENDIMIENTO DIADOCOCINÉTICO DEL HABLA (DDK)"
+	appendInfoLine: " "
+	appendInfoLine: " "	
+	appendInfoLine: "Promedio de sílabas por segundo (PSS)",tab$,":",tab$,fixed$(mediaSPS,2)," s/s",tab$,"(ref. 4 ± 1 s/s)*"
+	appendInfoLine: "Coef. de variabilidad del PSS",tab$,tab$,":",tab$,fixed$(coefVarPSS,1),"%",tab$,tab$
+	appendInfoLine: "Duración promedio de la sílaba (DPS)",tab$,":",tab$,fixed$(mediaDSms,0)," ms",tab$,tab$,"(ref. 263 ± 66 ms.)*"
+	appendInfoLine: "Coef. de variabilidad de la DPS",tab$,tab$,":",tab$,fixed$(coefVarDPS,1),"%",tab$,tab$,"(ref. < 5,5%)*"
+	appendInfoLine: " "
+	appendInfoLine: " "
+	appendInfoLine: "Segundos analizados",tab$,tab$,":",tab$,nSilabas,tab$,"(ideal 8 seg.)"
+	appendInfoLine: "Número de sílabas analizadas",tab$,":",tab$,nSegundos,tab$,"(ideal 30 sil.)"
+	appendInfoLine: " "
+    appendInfoLine: "(*)Valores de referencia para población adulta"
+	appendInfoLine: "------------------------------------------------------------------------------------"
+	appendInfoLine: " "
+
