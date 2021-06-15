@@ -4,7 +4,8 @@
 # la duración promedio de la sílaba y el coeficiente de variabilidad de la duración promedio de la sílaba.
 
 # This script is distributed under GNU General Public License.
-# Autores: Hernán Emilio Pérez, Daniela Osses y Domingo Román. 20 de abril de 2021.
+# Autores: Hernán Emilio Pérez, Daniela Osses y Domingo Román. Versión 1.1 del 15 de junio de 2021.
+# Este script fue probado con la versión 6.1.48 de Praat.
 
 # Para utilizarlo debe grabar antes una emisión repetida y continua de la sílaba /pa/ de al menos 8 segundos
 # (o 30 repeticiones). Puede funcionar con emisiones más breves, pero lo ideal es un mínimo de 30 repeticiones
@@ -103,9 +104,9 @@
 		# para comenzar el etiquetado del tier 2 desde ahí. Así se deja fuera todo dato no deseado
 		# que pudiese haber en el primer y/o segundo intervalo.
 
-		etiqSegIntrv = Get label of interval: 1, 2
+		etiqSegIntrv$ = Get label of interval: 1, 2
 
-			if etiqSegIntrv == 1
+			if etiqSegIntrv$ == "1"
 
 				timePrimeraConsonante = Get start time of interval: 1, 3
 				intervInicialTier1 = 3
@@ -171,12 +172,12 @@
 		
 		# timeAcum = timePrimeraConsonante
 
-		  ult_intervalo = Get label of interval: 1, n_intervalos
+		  ult_intervalo$ = Get label of interval: 1, n_intervalos
 
-                              if ult_intervalo == 1
+                              if ult_intervalo$ == "1"
  				  itera = itera -1
 
-			      elsif ult_intervalo == 0
+			      elsif ult_intervalo$ == "0"
 				  itera = itera
                                endif
 
@@ -377,7 +378,7 @@
 	appendInfoLine: "Segundos analizados",tab$,tab$,":",tab$,nSilabas,tab$,"(ideal 8 seg.)"
 	appendInfoLine: "Número de sílabas analizadas",tab$,":",tab$,nSegundos,tab$,"(ideal 30 sil.)"
 	appendInfoLine: " "
-    appendInfoLine: "(*)Valores de referencia para población adulta"
+   	appendInfoLine: "(*)Valores de referencia para población adulta"
 	appendInfoLine: "------------------------------------------------------------------------------------"
 	appendInfoLine: " "
 
